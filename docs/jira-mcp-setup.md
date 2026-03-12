@@ -21,28 +21,23 @@ This guide explains how to connect Claude Code to your Jira instance using the M
 
 ## Step 3: Configure the MCP plugin in Claude Code
 
-Add the following to your Claude Code MCP config file.
+Run this command (replace the placeholder values with your actual values):
 
-**Location (Windows):** `%APPDATA%\Claude\claude_desktop_config.json`
-**Location (macOS/Linux):** `~/.config/claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "mcp-atlassian": {
-      "command": "uvx",
-      "args": ["mcp-atlassian"],
-      "env": {
-        "JIRA_URL": "https://YOUR-ORG.atlassian.net",
-        "JIRA_USERNAME": "YOUR_EMAIL@example.com",
-        "JIRA_API_TOKEN": "YOUR_API_TOKEN"
-      }
-    }
-  }
-}
+```bash
+claude mcp add --transport stdio --scope user \
+  --env JIRA_URL=https://YOUR-ORG.atlassian.net \
+  --env JIRA_USERNAME=YOUR_EMAIL@example.com \
+  --env JIRA_API_TOKEN=YOUR_API_TOKEN \
+  atlassian -- cmd /c uvx mcp-atlassian
 ```
 
-Replace `YOUR-ORG`, `YOUR_EMAIL@example.com`, and `YOUR_API_TOKEN` with your actual values.
+> **Windows note:** The `cmd /c` wrapper is required on Windows. Without it you will get "Connection closed" errors.
+
+To verify it was added:
+
+```bash
+claude mcp list
+```
 
 ## Step 4: Verify the connection
 
@@ -55,6 +50,7 @@ If Jira responds with your cards, the plugin is working.
 ## Troubleshooting
 
 - **401 Unauthorized** — check your email and API token
-- **404 Not Found** — check your Jira URL (no trailing slash)
+- **404 Not Found** — check your Jira URL (no trailing slash, e.g. `https://your-org.atlassian.net`)
+- **Connection closed** — make sure you used `cmd /c uvx` (not just `uvx`) on Windows
 - **`uvx` not found** — install `uv` first: `pip install uv` (or `winget install astral-sh.uv` on Windows)
 - **Package not found / install error** — verify the package name at https://pypi.org/project/mcp-atlassian or consult the Claude Code MCP documentation
