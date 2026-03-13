@@ -53,7 +53,7 @@ def _parse_arg(args: list[str], flag: str) -> str | None:
 def _write_input_csv(path: Path, candidates: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = (["name"] + [k for k in candidates[0] if k != "name"]) if candidates else ["name"]
-    with open(path, "w", newline="") as f:
+    with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in candidates:
@@ -64,7 +64,7 @@ def write_results(name: str, available_domains: list[str], tlds: list[str], out_
     resolved = out_dir if out_dir is not None else _output_dir()
     resolved.mkdir(parents=True, exist_ok=True)
     out_path = resolved / f"{name}.csv"
-    with open(out_path, "w", newline="") as f:
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["domain", "tld", "available"])
         writer.writeheader()
         for tld in tlds:
