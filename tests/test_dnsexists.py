@@ -82,6 +82,20 @@ def test_check_domains_logs_taken_result(caplog):
 
 # --- write_results ---
 
+def test_write_results_uses_out_dir_when_provided(tmp_path):
+    from dnsexists import write_results
+    tlds = [".com", ".io"]
+    path = write_results("myapp", ["myapp.io"], tlds, out_dir=tmp_path)
+    assert path == tmp_path / "myapp.csv"
+    assert path.exists()
+
+
+def test_write_results_creates_nested_out_dir(tmp_path):
+    from dnsexists import write_results
+    nested = tmp_path / "dev" / "output"
+    write_results("myapp", [], [".com"], out_dir=nested)
+    assert nested.exists()
+
 def test_write_results_creates_csv(tmp_path, monkeypatch):
     import dnsexists
     monkeypatch.setattr(dnsexists, "_output_dir", lambda: tmp_path)
@@ -106,20 +120,27 @@ def test_main_no_args_exits_2(monkeypatch):
     assert exc.value.code == 2
 
 
-def test_main_no_available_domains_exits_1(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["dnsexists.py", "myapp"])
+def test_main_name_no_available_domains_exits_1(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--name", "myapp"])
     with patch("dnsexists.check_domains", return_value=[]):
         with pytest.raises(SystemExit) as exc:
             main()
     assert exc.value.code == 1
 
 
-def test_main_writes_file_when_available(monkeypatch, tmp_path):
+def test_main_name_writes_to_output(monkeypatch, tmp_path):
     import dnsexists as dc
-    monkeypatch.setattr("sys.argv", ["dnsexists.py", "myapp"])
-    monkeypatch.setattr(dc, "_output_dir", lambda: tmp_path)
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--name", "myapp"])
+    monkeypatch.setattr(dc, "_root", lambda: tmp_path)
     with patch("dnsexists.check_domains", return_value=["myapp.io"]):
         with pytest.raises(SystemExit) as exc:
             main()
     assert exc.value.code == 0
-    assert (tmp_path / "myapp.csv").exists()
+    assert (tmp_path / "output" / "myapp.csv").exists()
+
+
+def test_main_unsupported_field_exits_2(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "doesnotexist"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2

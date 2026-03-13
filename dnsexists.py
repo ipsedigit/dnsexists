@@ -1,4 +1,5 @@
 import csv
+import importlib
 import logging
 import sys
 import time
@@ -34,14 +35,35 @@ def check_domains(name: str, tlds: list[str], delay: float = 1.0) -> list[str]:
     return available
 
 
+def _root() -> Path:
+    return Path(__file__).parent
+
+
 def _output_dir() -> Path:
-    return Path(__file__).parent / "output"
+    return _root() / "output"
 
 
-def write_results(name: str, available_domains: list[str], tlds: list[str]) -> Path:
-    out_dir = _output_dir()
-    out_dir.mkdir(exist_ok=True)
-    out_path = out_dir / f"{name}.csv"
+def _parse_arg(args: list[str], flag: str) -> str | None:
+    try:
+        return args[args.index(flag) + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def _write_input_csv(path: Path, candidates: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = (["name"] + [k for k in candidates[0] if k != "name"]) if candidates else ["name"]
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in candidates:
+            writer.writerow({k: row.get(k, "") for k in fieldnames})
+
+
+def write_results(name: str, available_domains: list[str], tlds: list[str], out_dir: Path | None = None) -> Path:
+    resolved = out_dir if out_dir is not None else _output_dir()
+    resolved.mkdir(parents=True, exist_ok=True)
+    out_path = resolved / f"{name}.csv"
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["domain", "tld", "available"])
         writer.writeheader()
@@ -57,16 +79,53 @@ def write_results(name: str, available_domains: list[str], tlds: list[str]) -> P
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    if len(sys.argv) != 2:
-        print("Usage: python dnsexists.py <name>")
+    args = sys.argv[1:]
+    field = _parse_arg(args, "--field")
+
+    root = _root()
+    name = _parse_arg(args, "--name")
+
+    if not field and not name:
+        print("Usage: python dnsexists.py --name <name>")
+        print("       python dnsexists.py --field dev")
         sys.exit(2)
-    name = sys.argv[1]
-    available = check_domains(name, TLDS)
-    if not available:
-        print(f"No domains available for {name}")
-        sys.exit(1)
-    write_results(name, available, TLDS)
-    print(f"Results written to output/{name}.csv")
+
+    if not field:
+        # standalone mode
+        available = check_domains(name, TLDS)
+        if not available:
+            print(f"No domains available for {name}")
+            sys.exit(1)
+        write_results(name, available, TLDS, out_dir=root / "output")
+        print(f"Results written to output/{name}.csv")
+        sys.exit(0)
+
+    if field != "dev":
+        print(f"Unknown field: {field}. Supported: dev")
+        sys.exit(2)
+
+    try:
+        field_mod = importlib.import_module(f"fields.{field}")
+    except ModuleNotFoundError:
+        print(f"Unknown field: {field}")
+        sys.exit(2)
+
+    candidates = field_mod.fetch({})
+    _write_input_csv(root / field / "input" / "candidates.csv", candidates)
+
+    if not candidates:
+        logger.warning("No candidates returned by %s.fetch()", field)
+        sys.exit(0)
+
+    names = field_mod.select(candidates)
+    if not names:
+        logger.warning("No names returned by %s.select()", field)
+        sys.exit(0)
+
+    out_dir = root / field / "output"
+    for name in names:
+        available = check_domains(name, TLDS)
+        write_results(name, available, TLDS, out_dir=out_dir)
     sys.exit(0)
 
 
