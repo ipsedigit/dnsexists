@@ -1,1 +1,1 @@
-# no third-party runtime dependencies
+dnspython>=2.0
