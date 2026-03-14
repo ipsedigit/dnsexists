@@ -60,6 +60,16 @@ def _write_input_csv(path: Path, candidates: list[dict]) -> None:
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
+def synthesize(scored: list[tuple[float, str]], out_dir: Path) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ranked = sorted(scored, key=lambda x: (-x[0], x[1]))[:10]
+    with open(out_dir / "insight.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["domain", "score"])
+        writer.writeheader()
+        for score, domain in ranked:
+            writer.writerow({"domain": domain, "score": score})
+
+
 def write_results(name: str, available_domains: list[str], tlds: list[str], out_dir: Path | None = None) -> Path:
     resolved = out_dir if out_dir is not None else _output_dir()
     resolved.mkdir(parents=True, exist_ok=True)
@@ -120,9 +130,18 @@ def main() -> None:
         sys.exit(0)
 
     out_dir = root / field / "output"
-    for name in names:
+    names_set = set(names)
+    scored: list[tuple[float, str]] = []
+    for candidate in candidates:
+        name = candidate["name"]
+        score = candidate["score"]
+        if name not in names_set:
+            continue
         available = check_domains(name, TLDS)
         write_results(name, available, TLDS, out_dir=out_dir)
+        for domain in available:
+            scored.append((score, domain))
+    synthesize(scored, out_dir=out_dir / "insight")
     sys.exit(0)
 
 

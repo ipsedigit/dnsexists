@@ -1,7 +1,7 @@
 import logging
-from unittest.mock import patch, call
+from unittest.mock import patch, call, MagicMock
 import pytest
-from dnsexists import is_available, check_domains, write_results, main
+from dnsexists import is_available, check_domains, write_results, synthesize, main
 import csv as csv_module
 
 
@@ -110,6 +110,67 @@ def test_write_results_creates_csv(tmp_path, monkeypatch):
     assert "available" not in rows[0]
 
 
+# --- synthesize ---
+
+def test_synthesize_writes_top_10(tmp_path):
+    scored = [(float(i), f"domain{i}.com") for i in range(15, 0, -1)]
+    synthesize(scored, out_dir=tmp_path)
+    with open(tmp_path / "insight.csv") as f:
+        rows = list(csv_module.DictReader(f))
+    assert len(rows) == 10
+
+
+def test_synthesize_writes_all_when_fewer_than_10(tmp_path):
+    scored = [(5.0, "a.com"), (3.0, "b.com"), (1.0, "c.com")]
+    synthesize(scored, out_dir=tmp_path)
+    with open(tmp_path / "insight.csv") as f:
+        rows = list(csv_module.DictReader(f))
+    assert len(rows) == 3
+
+
+def test_synthesize_sorts_by_score_descending(tmp_path):
+    scored = [(1.0, "low.com"), (100.0, "high.com"), (50.0, "mid.com")]
+    synthesize(scored, out_dir=tmp_path)
+    with open(tmp_path / "insight.csv") as f:
+        rows = list(csv_module.DictReader(f))
+    assert rows[0]["domain"] == "high.com"
+    assert rows[1]["domain"] == "mid.com"
+    assert rows[2]["domain"] == "low.com"
+
+
+def test_synthesize_breaks_ties_by_domain_ascending(tmp_path):
+    scored = [(10.0, "zzz.com"), (10.0, "aaa.com"), (10.0, "mmm.com")]
+    synthesize(scored, out_dir=tmp_path)
+    with open(tmp_path / "insight.csv") as f:
+        rows = list(csv_module.DictReader(f))
+    assert rows[0]["domain"] == "aaa.com"
+    assert rows[1]["domain"] == "mmm.com"
+    assert rows[2]["domain"] == "zzz.com"
+
+
+def test_synthesize_csv_has_only_domain_and_score_columns(tmp_path):
+    scored = [(5.0, "example.com")]
+    synthesize(scored, out_dir=tmp_path)
+    with open(tmp_path / "insight.csv") as f:
+        reader = csv_module.DictReader(f)
+        assert set(reader.fieldnames) == {"domain", "score"}
+
+
+def test_synthesize_empty_input_writes_header_only(tmp_path):
+    synthesize([], out_dir=tmp_path)
+    with open(tmp_path / "insight.csv") as f:
+        rows = list(csv_module.DictReader(f))
+    assert rows == []
+    assert (tmp_path / "insight.csv").exists()
+
+
+def test_synthesize_creates_out_dir(tmp_path):
+    nested = tmp_path / "insight"
+    synthesize([], out_dir=nested)
+    assert nested.exists()
+    assert (nested / "insight.csv").exists()
+
+
 # --- main ---
 
 def test_main_no_args_exits_2(monkeypatch):
@@ -143,3 +204,35 @@ def test_main_unsupported_field_exits_2(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 2
+
+
+def test_main_field_calls_synthesize_with_scored_domains(monkeypatch, tmp_path):
+    import dnsexists
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev"])
+    monkeypatch.setattr(dnsexists, "_root", lambda: tmp_path)
+
+    candidates = [
+        {"name": "alpha", "score": 10.0, "sources": ["github"]},
+        {"name": "beta", "score": 5.0, "sources": ["hn"]},
+    ]
+
+    def mock_check(name, tlds, delay=1.0):
+        return [f"{name}.com"]
+
+    with patch("dnsexists.importlib.import_module") as mock_import, \
+         patch("dnsexists.check_domains", side_effect=mock_check), \
+         patch("dnsexists.write_results"), \
+         patch("dnsexists.synthesize") as mock_synthesize:
+
+        mock_mod = MagicMock()
+        mock_mod.fetch.return_value = candidates
+        mock_mod.select.return_value = ["alpha", "beta"]
+        mock_import.return_value = mock_mod
+
+        with pytest.raises(SystemExit):
+            main()
+
+    mock_synthesize.assert_called_once_with(
+        [(10.0, "alpha.com"), (5.0, "beta.com")],
+        out_dir=tmp_path / "dev" / "output" / "insight",
+    )

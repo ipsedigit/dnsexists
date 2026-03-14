@@ -70,8 +70,8 @@ class TestFieldPipelineHappyPath:
     def test_input_csv_written_with_correct_headers_and_rows(self, monkeypatch, tmp_path):
         field_mod = MagicMock()
         field_mod.fetch.return_value = [
-            {"name": "myrepo", "stars": 100, "url": "https://github.com/a/myrepo"},
-            {"name": "cooltool", "stars": 200, "url": "https://github.com/b/cooltool"},
+            {"name": "myrepo", "score": 100.0, "sources": ["github"]},
+            {"name": "cooltool", "score": 200.0, "sources": ["github"]},
         ]
         field_mod.select.return_value = ["myrepo", "cooltool"]
         monkeypatch.setattr(sys, "argv", ["dnsexists.py", "--field", "dev"])
@@ -93,7 +93,7 @@ class TestFieldPipelineHappyPath:
 
     def test_write_results_called_with_correct_out_dir(self, monkeypatch, tmp_path):
         field_mod = MagicMock()
-        field_mod.fetch.return_value = [{"name": "myrepo", "stars": 1, "url": "u"}]
+        field_mod.fetch.return_value = [{"name": "myrepo", "score": 1.0, "sources": ["github"]}]
         field_mod.select.return_value = ["myrepo"]
         monkeypatch.setattr(sys, "argv", ["dnsexists.py", "--field", "dev"])
         monkeypatch.setattr(dnsexists, "_root", lambda: tmp_path)
@@ -108,7 +108,7 @@ class TestFieldPipelineHappyPath:
 
     def test_check_domains_called_once_per_name(self, monkeypatch, tmp_path):
         field_mod = MagicMock()
-        field_mod.fetch.return_value = [{"name": "myrepo"}, {"name": "cooltool"}]
+        field_mod.fetch.return_value = [{"name": "myrepo", "score": 1.0, "sources": ["github"]}, {"name": "cooltool", "score": 2.0, "sources": ["github"]}]
         field_mod.select.return_value = ["myrepo", "cooltool"]
         monkeypatch.setattr(sys, "argv", ["dnsexists.py", "--field", "dev"])
         monkeypatch.setattr(dnsexists, "_root", lambda: tmp_path)
