@@ -105,10 +105,9 @@ def test_write_results_creates_csv(tmp_path, monkeypatch):
     assert path.exists()
     with open(path) as f:
         rows = list(csv_module.DictReader(f))
-    assert len(rows) == 3
-    assert rows[0] == {"domain": "myapp.com", "tld": ".com", "available": "false"}
-    assert rows[1] == {"domain": "myapp.io", "tld": ".io", "available": "true"}
-    assert rows[2] == {"domain": "myapp.org", "tld": ".org", "available": "false"}
+    assert len(rows) == 1
+    assert rows[0] == {"domain": "myapp.io", "tld": ".io"}
+    assert "available" not in rows[0]
 
 
 # --- main ---

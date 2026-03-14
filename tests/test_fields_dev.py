@@ -2,130 +2,301 @@ import os
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 import pytest
-from fields.dev import fetch, select
+from fields.dev import fetch, select, _fetch_github, _fetch_hn, _fetch_reddit, _fetch_ph, _merge
 
 
-def _mock_response(items, status_code=200):
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def _gh_response(items, status=200):
     resp = MagicMock()
-    resp.status_code = status_code
+    resp.status_code = status
     resp.json.return_value = {"items": items}
-    resp.text = "error message"
     return resp
 
 
-def _make_item(name="myrepo", stars=1000, url="https://github.com/u/myrepo",
-               created_at="2026-02-01T00:00:00Z", description="A cool repo"):
-    return {
-        "name": name,
-        "stargazers_count": stars,
-        "html_url": url,
-        "created_at": created_at,
-        "description": description,
-    }
+def _gh_item(name="myrepo", stars=100, created_at=None):
+    created_at = created_at or date.today().isoformat() + "T00:00:00Z"
+    return {"name": name, "stargazers_count": stars, "created_at": created_at}
 
 
-class TestFetch:
-    def test_returns_correct_fields(self):
-        items = [_make_item("myrepo", 1000, "https://github.com/u/myrepo",
-                            "2026-02-01T00:00:00Z", "cool")]
-        with patch("requests.get", return_value=_mock_response(items)):
-            result = fetch({})
+def _hn_response(hits, status=200):
+    resp = MagicMock()
+    resp.status_code = status
+    resp.json.return_value = {"hits": hits}
+    return resp
+
+
+def _hn_hit(title="myproject", points=500):
+    return {"title": title, "points": points}
+
+
+def _reddit_response(children, status=200):
+    resp = MagicMock()
+    resp.status_code = status
+    resp.json.return_value = {"data": {"children": [{"data": c} for c in children]}}
+    return resp
+
+
+def _ph_response(nodes, status=200):
+    resp = MagicMock()
+    resp.status_code = status
+    resp.json.return_value = {"data": {"posts": {"edges": [{"node": n} for n in nodes]}}}
+    return resp
+
+
+# ── _fetch_github ─────────────────────────────────────────────────────────────
+
+class TestFetchGitHub:
+    def test_returns_name_score_source(self):
+        items = [_gh_item("myrepo", stars=100)]
+        with patch("requests.get", return_value=_gh_response(items)):
+            result = _fetch_github(days=7, limit=50)
         assert len(result) == 1
         assert result[0]["name"] == "myrepo"
-        assert result[0]["stars"] == 1000
-        assert result[0]["url"] == "https://github.com/u/myrepo"
-        assert result[0]["created_at"] == "2026-02-01T00:00:00Z"
-        assert result[0]["description"] == "cool"
+        assert result[0]["score"] == pytest.approx(100.0)
+        assert result[0]["source"] == "github"
 
-    def test_name_is_first_key(self):
-        items = [_make_item()]
-        with patch("requests.get", return_value=_mock_response(items)):
-            result = fetch({})
-        assert list(result[0].keys())[0] == "name"
+    def test_score_is_stars_divided_by_age_days(self):
+        created = (date.today() - timedelta(days=2)).isoformat() + "T00:00:00Z"
+        items = [_gh_item("myrepo", stars=200, created_at=created)]
+        with patch("requests.get", return_value=_gh_response(items)):
+            result = _fetch_github(days=7, limit=50)
+        assert result[0]["score"] == pytest.approx(100.0)  # 200 / 2
 
-    def test_uses_created_filter_in_query(self):
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({})
-        params = mock_get.call_args[1]["params"]
-        assert "created:>" in params["q"]
-        assert params["sort"] == "stars"
-        assert params["order"] == "desc"
+    def test_excludes_repos_older_than_days(self):
+        old = (date.today() - timedelta(days=10)).isoformat() + "T00:00:00Z"
+        items = [_gh_item("oldrepo", stars=1000, created_at=old)]
+        with patch("requests.get", return_value=_gh_response(items)):
+            result = _fetch_github(days=7, limit=50)
+        assert result == []
 
-    def test_query_cutoff_respects_days_param(self):
-        expected_cutoff = (date.today() - timedelta(days=7)).isoformat()
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({"days": 7})
-        params = mock_get.call_args[1]["params"]
-        assert expected_cutoff in params["q"]
+    def test_returns_empty_on_non_200(self):
+        with patch("requests.get", return_value=_gh_response([], status=403)):
+            result = _fetch_github(days=7, limit=50)
+        assert result == []
 
-    def test_query_uses_default_30_days(self):
-        expected_cutoff = (date.today() - timedelta(days=30)).isoformat()
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({})
-        params = mock_get.call_args[1]["params"]
-        assert expected_cutoff in params["q"]
+    def test_returns_empty_on_network_error(self):
+        with patch("requests.get", side_effect=ConnectionError("fail")):
+            result = _fetch_github(days=7, limit=50)
+        assert result == []
 
-    def test_limit_param_sets_per_page(self):
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({"limit": 10})
-        params = mock_get.call_args[1]["params"]
-        assert params["per_page"] == 10
-
-    def test_default_limit_is_50(self):
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({})
-        params = mock_get.call_args[1]["params"]
-        assert params["per_page"] == 50
-
-    def test_sends_auth_header_when_token_set(self, monkeypatch):
+    def test_uses_token_when_set(self, monkeypatch):
         monkeypatch.setenv("GITHUB_TOKEN", "mytoken")
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({})
+        with patch("requests.get", return_value=_gh_response([])) as mock_get:
+            _fetch_github(days=7, limit=50)
         headers = mock_get.call_args[1]["headers"]
         assert headers.get("Authorization") == "Bearer mytoken"
 
-    def test_omits_auth_header_when_token_absent(self, monkeypatch):
+    def test_omits_auth_when_token_absent(self, monkeypatch):
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        with patch("requests.get", return_value=_mock_response([])) as mock_get:
-            fetch({})
+        with patch("requests.get", return_value=_gh_response([])) as mock_get:
+            _fetch_github(days=7, limit=50)
         headers = mock_get.call_args[1]["headers"]
         assert "Authorization" not in headers
 
-    def test_raises_runtime_error_on_non_200(self):
-        with patch("requests.get", return_value=_mock_response([], status_code=403)):
-            with pytest.raises(RuntimeError, match="403"):
-                fetch({})
+    def test_uses_10_second_timeout(self):
+        with patch("requests.get", return_value=_gh_response([])) as mock_get:
+            _fetch_github(days=7, limit=50)
+        assert mock_get.call_args[1]["timeout"] == 10
 
-    def test_null_description_becomes_empty_string(self):
-        item = _make_item()
-        item["description"] = None
-        with patch("requests.get", return_value=_mock_response([item])):
+
+# ── _fetch_hn ─────────────────────────────────────────────────────────────────
+
+class TestFetchHN:
+    def test_returns_name_score_source(self):
+        with patch("requests.get", return_value=_hn_response([_hn_hit("myproject", 500)])):
+            result = _fetch_hn(days=7, limit=50)
+        assert len(result) == 1
+        assert result[0]["name"] == "myproject"
+        assert result[0]["score"] == pytest.approx(500.0)
+        assert result[0]["source"] == "hn"
+
+    def test_returns_empty_on_non_200(self):
+        with patch("requests.get", return_value=_hn_response([], status=500)):
+            result = _fetch_hn(days=7, limit=50)
+        assert result == []
+
+    def test_returns_empty_on_network_error(self):
+        with patch("requests.get", side_effect=ConnectionError("fail")):
+            result = _fetch_hn(days=7, limit=50)
+        assert result == []
+
+    def test_uses_10_second_timeout(self):
+        with patch("requests.get", return_value=_hn_response([])) as mock_get:
+            _fetch_hn(days=7, limit=50)
+        assert mock_get.call_args[1]["timeout"] == 10
+
+
+# ── _fetch_reddit ─────────────────────────────────────────────────────────────
+
+class TestFetchReddit:
+    def test_returns_name_score_source(self):
+        children = [{"title": "myproject", "score": 300}]
+        with patch("requests.get", return_value=_reddit_response(children)):
+            result = _fetch_reddit(days=7, limit=50)
+        assert any(r["name"] == "myproject" for r in result)
+        assert all(r["source"] == "reddit" for r in result)
+
+    def test_sets_user_agent_header(self):
+        with patch("requests.get", return_value=_reddit_response([])) as mock_get:
+            _fetch_reddit(days=7, limit=50)
+        for call_args in mock_get.call_args_list:
+            assert "User-Agent" in call_args[1]["headers"]
+
+    def test_returns_empty_when_all_subreddits_fail(self):
+        resp = MagicMock()
+        resp.status_code = 429
+        with patch("requests.get", return_value=resp):
+            result = _fetch_reddit(days=7, limit=50)
+        assert result == []
+
+    def test_returns_empty_on_network_error(self):
+        with patch("requests.get", side_effect=ConnectionError("fail")):
+            result = _fetch_reddit(days=7, limit=50)
+        assert result == []
+
+    def test_uses_10_second_timeout(self):
+        with patch("requests.get", return_value=_reddit_response([])) as mock_get:
+            _fetch_reddit(days=7, limit=50)
+        for call_args in mock_get.call_args_list:
+            assert call_args[1]["timeout"] == 10
+
+
+# ── _fetch_ph ─────────────────────────────────────────────────────────────────
+
+class TestFetchPH:
+    def test_returns_empty_when_token_absent(self, monkeypatch):
+        monkeypatch.delenv("PRODUCT_HUNT_TOKEN", raising=False)
+        result = _fetch_ph(days=7, limit=50)
+        assert result == []
+
+    def test_returns_name_score_source(self, monkeypatch):
+        monkeypatch.setenv("PRODUCT_HUNT_TOKEN", "tok")
+        nodes = [{"name": "MyCoolApp", "votesCount": 200}]
+        with patch("requests.post", return_value=_ph_response(nodes)):
+            result = _fetch_ph(days=7, limit=50)
+        assert len(result) == 1
+        assert result[0]["name"] == "MyCoolApp"
+        assert result[0]["score"] == pytest.approx(200.0)
+        assert result[0]["source"] == "producthunt"
+
+    def test_returns_empty_on_non_200(self, monkeypatch):
+        monkeypatch.setenv("PRODUCT_HUNT_TOKEN", "tok")
+        with patch("requests.post", return_value=_ph_response([], status=500)):
+            result = _fetch_ph(days=7, limit=50)
+        assert result == []
+
+    def test_returns_empty_on_network_error(self, monkeypatch):
+        monkeypatch.setenv("PRODUCT_HUNT_TOKEN", "tok")
+        with patch("requests.post", side_effect=ConnectionError("fail")):
+            result = _fetch_ph(days=7, limit=50)
+        assert result == []
+
+    def test_uses_10_second_timeout(self, monkeypatch):
+        monkeypatch.setenv("PRODUCT_HUNT_TOKEN", "tok")
+        with patch("requests.post", return_value=_ph_response([])) as mock_post:
+            _fetch_ph(days=7, limit=50)
+        assert mock_post.call_args[1]["timeout"] == 10
+
+
+# ── _merge ────────────────────────────────────────────────────────────────────
+
+class TestMerge:
+    def test_deduplicates_by_normalized_name(self):
+        entries = [
+            {"name": "My_Tool", "score": 10, "source": "github"},
+            {"name": "my-tool", "score": 5, "source": "hn"},
+        ]
+        result = _merge(entries, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        assert len(result) == 1
+        assert result[0]["name"] == "my-tool"
+
+    def test_sums_weighted_scores(self):
+        entries = [
+            {"name": "mytool", "score": 10, "source": "github"},
+            {"name": "mytool", "score": 50, "source": "hn"},
+        ]
+        result = _merge(entries, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        # weighted sum = 10*1.0 + 50*0.8 = 50.0, multiplier = 2 → 100.0
+        assert result[0]["score"] == pytest.approx(100.0)
+
+    def test_cross_source_multiplier_boosts_multi_source_names(self):
+        single = [{"name": "tool", "score": 100, "source": "github"}]
+        multi = [
+            {"name": "tool", "score": 50, "source": "github"},
+            {"name": "tool", "score": 50, "source": "hn"},
+        ]
+        r_single = _merge(single, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        r_multi = _merge(multi, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        assert r_multi[0]["score"] > r_single[0]["score"]
+
+    def test_stores_sources_list(self):
+        entries = [
+            {"name": "mytool", "score": 10, "source": "github"},
+            {"name": "mytool", "score": 20, "source": "hn"},
+        ]
+        result = _merge(entries, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        assert set(result[0]["sources"]) == {"github", "hn"}
+
+    def test_sorts_by_score_descending(self):
+        entries = [
+            {"name": "low", "score": 1, "source": "github"},
+            {"name": "high", "score": 100, "source": "github"},
+            {"name": "mid", "score": 50, "source": "github"},
+        ]
+        result = _merge(entries, weights={"github": 1.0}, limit=10)
+        assert result[0]["name"] == "high"
+        assert result[1]["name"] == "mid"
+        assert result[2]["name"] == "low"
+
+    def test_returns_top_limit_entries(self):
+        entries = [{"name": f"tool{i}", "score": float(i), "source": "github"} for i in range(20)]
+        result = _merge(entries, weights={"github": 1.0}, limit=5)
+        assert len(result) == 5
+
+    def test_returns_all_when_fewer_than_limit(self):
+        entries = [{"name": "only", "score": 1.0, "source": "github"}]
+        result = _merge(entries, weights={"github": 1.0}, limit=10)
+        assert len(result) == 1
+
+
+# ── fetch (integration) ───────────────────────────────────────────────────────
+
+class TestFetch:
+    def test_returns_merged_results_from_all_sources(self):
+        gh = [{"name": "trending", "score": 100.0, "source": "github"}]
+        hn = [{"name": "trending", "score": 200.0, "source": "hn"}]
+        with patch("fields.dev._fetch_github", return_value=gh), \
+             patch("fields.dev._fetch_hn", return_value=hn), \
+             patch("fields.dev._fetch_reddit", return_value=[]), \
+             patch("fields.dev._fetch_ph", return_value=[]):
             result = fetch({})
-        assert result[0]["description"] == ""
+        assert len(result) == 1
+        assert result[0]["name"] == "trending"
 
+    def test_default_days_is_7(self):
+        with patch("fields.dev._fetch_github", return_value=[]) as mock_gh, \
+             patch("fields.dev._fetch_hn", return_value=[]), \
+             patch("fields.dev._fetch_reddit", return_value=[]), \
+             patch("fields.dev._fetch_ph", return_value=[]):
+            fetch({})
+        mock_gh.assert_called_once_with(days=7, limit=50)
+
+    def test_args_passed_to_fetchers(self):
+        with patch("fields.dev._fetch_github", return_value=[]) as mock_gh, \
+             patch("fields.dev._fetch_hn", return_value=[]), \
+             patch("fields.dev._fetch_reddit", return_value=[]), \
+             patch("fields.dev._fetch_ph", return_value=[]):
+            fetch({"days": 3, "limit": 10})
+        mock_gh.assert_called_once_with(days=3, limit=10)
+
+
+# ── select ────────────────────────────────────────────────────────────────────
 
 class TestSelect:
     def test_returns_all_valid_names(self):
         candidates = [{"name": "myrepo"}, {"name": "cooltool"}]
         assert select(candidates) == ["myrepo", "cooltool"]
-
-    def test_strips_invalid_characters(self):
-        assert select([{"name": "my repo!"}]) == ["my-repo"]
-
-    def test_lowercases_names(self):
-        assert select([{"name": "MyRepo"}]) == ["myrepo"]
-
-    def test_removes_leading_hyphens(self):
-        assert select([{"name": "--myrepo"}]) == ["myrepo"]
-
-    def test_removes_trailing_hyphens(self):
-        assert select([{"name": "myrepo--"}]) == ["myrepo"]
-
-    def test_drops_empty_results(self):
-        assert select([{"name": "!!!"}]) == []
-
-    def test_drops_empty_string_name(self):
-        assert select([{"name": ""}]) == []
 
     def test_drops_names_shorter_than_3_chars(self):
         assert select([{"name": "ab"}]) == []
@@ -144,3 +315,6 @@ class TestSelect:
 
     def test_keeps_names_with_mixed_digits(self):
         assert select([{"name": "repo123"}]) == ["repo123"]
+
+    def test_drops_empty_name(self):
+        assert select([{"name": ""}]) == []

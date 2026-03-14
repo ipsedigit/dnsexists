@@ -65,15 +65,12 @@ def write_results(name: str, available_domains: list[str], tlds: list[str], out_
     resolved.mkdir(parents=True, exist_ok=True)
     out_path = resolved / f"{name}.csv"
     with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["domain", "tld", "available"])
+        writer = csv.DictWriter(f, fieldnames=["domain", "tld"])
         writer.writeheader()
         for tld in tlds:
             domain = name + tld
-            writer.writerow({
-                "domain": domain,
-                "tld": tld,
-                "available": "true" if domain in available_domains else "false",
-            })
+            if domain in available_domains:
+                writer.writerow({"domain": domain, "tld": tld})
     return out_path
 
 
