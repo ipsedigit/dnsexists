@@ -206,6 +206,76 @@ def test_main_unsupported_field_exits_2(monkeypatch):
     assert exc.value.code == 2
 
 
+def test_main_no_args_usage_contains_limit(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["dnsexists.py"])
+    with pytest.raises(SystemExit):
+        main()
+    out = capsys.readouterr().out
+    assert "[--limit N]" in out
+
+
+def _make_field_mock(n=5):
+    candidates = [{"name": f"name{i}", "score": float(n - i), "sources": ["github"]} for i in range(n)]
+    names = [c["name"] for c in candidates]
+    mod = MagicMock()
+    mod.fetch.return_value = candidates
+    mod.select.return_value = names
+    return mod
+
+
+def test_main_limit_caps_check_domains_calls(monkeypatch, tmp_path):
+    import dnsexists as dc
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev", "--limit", "2"])
+    monkeypatch.setattr(dc, "_root", lambda: tmp_path)
+    with patch("dnsexists.importlib.import_module", return_value=_make_field_mock(5)), \
+         patch("dnsexists.check_domains", return_value=[]) as mock_check, \
+         patch("dnsexists.write_results"), \
+         patch("dnsexists.synthesize"):
+        with pytest.raises(SystemExit):
+            main()
+    assert mock_check.call_count == 2
+
+
+def test_main_limit_greater_than_names_checks_all(monkeypatch, tmp_path):
+    import dnsexists as dc
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev", "--limit", "10"])
+    monkeypatch.setattr(dc, "_root", lambda: tmp_path)
+    with patch("dnsexists.importlib.import_module", return_value=_make_field_mock(5)), \
+         patch("dnsexists.check_domains", return_value=[]) as mock_check, \
+         patch("dnsexists.write_results"), \
+         patch("dnsexists.synthesize"):
+        with pytest.raises(SystemExit):
+            main()
+    assert mock_check.call_count == 5
+
+
+def test_main_limit_absent_checks_all(monkeypatch, tmp_path):
+    import dnsexists as dc
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev"])
+    monkeypatch.setattr(dc, "_root", lambda: tmp_path)
+    with patch("dnsexists.importlib.import_module", return_value=_make_field_mock(5)), \
+         patch("dnsexists.check_domains", return_value=[]) as mock_check, \
+         patch("dnsexists.write_results"), \
+         patch("dnsexists.synthesize"):
+        with pytest.raises(SystemExit):
+            main()
+    assert mock_check.call_count == 5
+
+
+def test_main_limit_non_integer_exits_2(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev", "--limit", "abc"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
+def test_main_limit_zero_exits_2(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev", "--limit", "0"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
 def test_main_field_calls_synthesize_with_scored_domains(monkeypatch, tmp_path):
     import dnsexists
     monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev"])

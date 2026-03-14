@@ -92,9 +92,20 @@ def main() -> None:
     root = _root()
     name = _parse_arg(args, "--name")
 
+    limit_str = _parse_arg(args, "--limit")
+    limit = None
+    if limit_str is not None:
+        try:
+            limit = int(limit_str)
+            if limit <= 0:
+                raise ValueError
+        except ValueError:
+            print("--limit must be a positive integer")
+            sys.exit(2)
+
     if not field and not name:
         print("Usage: python dnsexists.py --name <name>")
-        print("       python dnsexists.py --field dev")
+        print("       python dnsexists.py --field dev [--limit N]")
         sys.exit(2)
 
     if not field:
@@ -125,6 +136,8 @@ def main() -> None:
         sys.exit(0)
 
     names = field_mod.select(candidates)
+    if limit is not None:
+        names = names[:limit]
     if not names:
         logger.warning("No names returned by %s.select()", field)
         sys.exit(0)
