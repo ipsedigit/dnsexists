@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -23,6 +24,28 @@ def _normalize(name: str) -> str:
     name = name.lower()
     name = re.sub(r"[^a-z0-9-]", "-", name)
     return name.strip("-")
+
+
+_STOP_WORDS = {
+    "the", "and", "for", "has", "have", "had", "was", "were", "are",
+    "but", "with", "how", "why", "what", "when", "where", "who", "new",
+    "from", "about", "this", "that",
+}
+_STRIP_CHARS = ".,!?:;'\"-()[]`"
+
+
+def _extract_tokens(title: str) -> list[str]:
+    tokens = []
+    for raw in title.split():
+        token = raw.strip(_STRIP_CHARS).lower()
+        if len(token) < 3 or len(token) > 30:
+            continue
+        if token in _STOP_WORDS:
+            continue
+        if not any(c.isalpha() for c in token):
+            continue
+        tokens.append(token)
+    return tokens
 
 
 def _fetch_github(days: int, limit: int) -> list[dict]:
@@ -82,8 +105,14 @@ def _fetch_hn(days: int, limit: int) -> list[dict]:
     for hit in resp.json().get("hits", []):
         title = hit.get("title") or ""
         points = hit.get("points") or 0
-        if title:
-            results.append({"name": title, "score": float(points), "source": "hn"})
+        if not title:
+            continue
+        tokens = _extract_tokens(title)
+        if not tokens:
+            continue
+        score_each = float(points) / len(tokens)
+        for token in tokens:
+            results.append({"name": token, "score": score_each, "source": "hn"})
     return results
 
 
@@ -108,8 +137,14 @@ def _fetch_reddit(days: int, limit: int) -> list[dict]:
             data = child.get("data", {})
             title = data.get("title") or ""
             score = data.get("score") or 0
-            if title:
-                results.append({"name": title, "score": float(score), "source": "reddit"})
+            if not title:
+                continue
+            tokens = _extract_tokens(title)
+            if not tokens:
+                continue
+            score_each = float(score) / len(tokens)
+            for token in tokens:
+                results.append({"name": token, "score": score_each, "source": "reddit"})
     return results
 
 
@@ -149,7 +184,7 @@ def _fetch_ph(days: int, limit: int) -> list[dict]:
     return results
 
 
-def _merge(entries: list[dict], weights: dict, limit: int) -> list[dict]:
+def _merge(entries: list[dict], weights: dict) -> list[dict]:
     groups: dict[str, dict] = {}
     for entry in entries:
         key = _normalize(entry["name"])
@@ -166,7 +201,15 @@ def _merge(entries: list[dict], weights: dict, limit: int) -> list[dict]:
         g["sources"] = list(g["sources"])
         merged.append(g)
     merged.sort(key=lambda x: x["score"], reverse=True)
-    return merged[:limit]
+    return merged
+
+
+def _sample(candidates: list[dict], limit: int) -> list[dict]:
+    pool = [c for c in candidates if c["score"] > 0]
+    if len(pool) <= limit:
+        return pool
+    keyed = sorted(pool, key=lambda c: random.random() ** (1.0 / c["score"]), reverse=True)
+    return keyed[:limit]
 
 
 def fetch(args: dict) -> list[dict]:
@@ -179,7 +222,8 @@ def fetch(args: dict) -> list[dict]:
         + _fetch_reddit(days=days, limit=limit)
         + _fetch_ph(days=days, limit=limit)
     )
-    return _merge(all_entries, weights, limit)
+    merged = _merge(all_entries, weights)
+    return _sample(merged, limit)
 
 
 def select(candidates: list[dict]) -> list[str]:

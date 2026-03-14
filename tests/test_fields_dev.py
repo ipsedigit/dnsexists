@@ -2,7 +2,7 @@ import os
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 import pytest
-from fields.dev import fetch, select, _fetch_github, _fetch_hn, _fetch_reddit, _fetch_ph, _merge
+from fields.dev import fetch, select, _fetch_github, _fetch_hn, _fetch_reddit, _fetch_ph, _merge, _extract_tokens, _sample
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -126,6 +126,29 @@ class TestFetchHN:
             _fetch_hn(days=7, limit=50)
         assert mock_get.call_args[1]["timeout"] == 10
 
+    def test_extracts_tokens_not_full_title(self):
+        hit = _hn_hit("Tony Hoare has died", points=500)
+        with patch("requests.get", return_value=_hn_response([hit])):
+            result = _fetch_hn(days=7, limit=50)
+        names = [r["name"] for r in result]
+        assert "tony" in names
+        assert "hoare" in names
+        assert "died" in names
+        assert "has" not in names
+        assert not any(" " in n for n in names)
+
+    def test_skips_story_when_all_tokens_filtered(self):
+        hit = _hn_hit("the and for", points=500)
+        with patch("requests.get", return_value=_hn_response([hit])):
+            result = _fetch_hn(days=7, limit=50)
+        assert result == []
+
+    def test_score_divided_equally_among_tokens(self):
+        hit = _hn_hit("Tony Hoare died", points=300)  # 3 valid tokens
+        with patch("requests.get", return_value=_hn_response([hit])):
+            result = _fetch_hn(days=7, limit=50)
+        assert all(r["score"] == pytest.approx(100.0) for r in result)
+
 
 # ── _fetch_reddit ─────────────────────────────────────────────────────────────
 
@@ -160,6 +183,29 @@ class TestFetchReddit:
             _fetch_reddit(days=7, limit=50)
         for call_args in mock_get.call_args_list:
             assert call_args[1]["timeout"] == 10
+
+    def test_extracts_tokens_not_full_title(self):
+        children = [{"title": "Tony Hoare has died", "score": 300}]
+        with patch("requests.get", return_value=_reddit_response(children)):
+            result = _fetch_reddit(days=7, limit=50)
+        names = [r["name"] for r in result]
+        assert "tony" in names
+        assert "hoare" in names
+        assert "died" in names
+        assert "has" not in names
+        assert not any(" " in n for n in names)
+
+    def test_skips_post_when_all_tokens_filtered(self):
+        children = [{"title": "the and for", "score": 300}]
+        with patch("requests.get", return_value=_reddit_response(children)):
+            result = _fetch_reddit(days=7, limit=50)
+        assert result == []
+
+    def test_score_divided_equally_among_tokens(self):
+        children = [{"title": "Tony Hoare died", "score": 300}]  # 3 valid tokens
+        with patch("requests.get", return_value=_reddit_response(children)):
+            result = _fetch_reddit(days=7, limit=50)
+        assert all(r["score"] == pytest.approx(100.0) for r in result)
 
 
 # ── _fetch_ph ─────────────────────────────────────────────────────────────────
@@ -207,7 +253,7 @@ class TestMerge:
             {"name": "My_Tool", "score": 10, "source": "github"},
             {"name": "my-tool", "score": 5, "source": "hn"},
         ]
-        result = _merge(entries, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        result = _merge(entries, weights={"github": 1.0, "hn": 0.8})
         assert len(result) == 1
         assert result[0]["name"] == "my-tool"
 
@@ -216,7 +262,7 @@ class TestMerge:
             {"name": "mytool", "score": 10, "source": "github"},
             {"name": "mytool", "score": 50, "source": "hn"},
         ]
-        result = _merge(entries, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        result = _merge(entries, weights={"github": 1.0, "hn": 0.8})
         # weighted sum = 10*1.0 + 50*0.8 = 50.0, multiplier = 2 → 100.0
         assert result[0]["score"] == pytest.approx(100.0)
 
@@ -226,8 +272,8 @@ class TestMerge:
             {"name": "tool", "score": 50, "source": "github"},
             {"name": "tool", "score": 50, "source": "hn"},
         ]
-        r_single = _merge(single, weights={"github": 1.0, "hn": 0.8}, limit=10)
-        r_multi = _merge(multi, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        r_single = _merge(single, weights={"github": 1.0, "hn": 0.8})
+        r_multi = _merge(multi, weights={"github": 1.0, "hn": 0.8})
         assert r_multi[0]["score"] > r_single[0]["score"]
 
     def test_stores_sources_list(self):
@@ -235,7 +281,7 @@ class TestMerge:
             {"name": "mytool", "score": 10, "source": "github"},
             {"name": "mytool", "score": 20, "source": "hn"},
         ]
-        result = _merge(entries, weights={"github": 1.0, "hn": 0.8}, limit=10)
+        result = _merge(entries, weights={"github": 1.0, "hn": 0.8})
         assert set(result[0]["sources"]) == {"github", "hn"}
 
     def test_sorts_by_score_descending(self):
@@ -244,19 +290,19 @@ class TestMerge:
             {"name": "high", "score": 100, "source": "github"},
             {"name": "mid", "score": 50, "source": "github"},
         ]
-        result = _merge(entries, weights={"github": 1.0}, limit=10)
+        result = _merge(entries, weights={"github": 1.0})
         assert result[0]["name"] == "high"
         assert result[1]["name"] == "mid"
         assert result[2]["name"] == "low"
 
-    def test_returns_top_limit_entries(self):
-        entries = [{"name": f"tool{i}", "score": float(i), "source": "github"} for i in range(20)]
-        result = _merge(entries, weights={"github": 1.0}, limit=5)
-        assert len(result) == 5
+    def test_merge_returns_all_entries(self):
+        entries = [{"name": f"tool{i}", "score": float(i + 1), "source": "github"} for i in range(20)]
+        result = _merge(entries, weights={"github": 1.0})
+        assert len(result) == 20
 
     def test_returns_all_when_fewer_than_limit(self):
         entries = [{"name": "only", "score": 1.0, "source": "github"}]
-        result = _merge(entries, weights={"github": 1.0}, limit=10)
+        result = _merge(entries, weights={"github": 1.0})
         assert len(result) == 1
 
 
@@ -269,7 +315,8 @@ class TestFetch:
         with patch("fields.dev._fetch_github", return_value=gh), \
              patch("fields.dev._fetch_hn", return_value=hn), \
              patch("fields.dev._fetch_reddit", return_value=[]), \
-             patch("fields.dev._fetch_ph", return_value=[]):
+             patch("fields.dev._fetch_ph", return_value=[]), \
+             patch("fields.dev._sample", side_effect=lambda c, l: c[:l]):
             result = fetch({})
         assert len(result) == 1
         assert result[0]["name"] == "trending"
@@ -318,3 +365,87 @@ class TestSelect:
 
     def test_drops_empty_name(self):
         assert select([{"name": ""}]) == []
+
+
+# ── _extract_tokens ───────────────────────────────────────────────────────────
+
+class TestExtractTokens:
+    def test_returns_valid_words_lowercased(self):
+        assert _extract_tokens("Tony Hoare died") == ["tony", "hoare", "died"]
+
+    def test_excludes_stop_words(self):
+        assert "has" not in _extract_tokens("Tony Hoare has died")
+
+    def test_excludes_tokens_shorter_than_3_chars(self):
+        assert _extract_tokens("Go is fast") == ["fast"]
+
+    def test_keeps_token_exactly_3_chars(self):
+        assert "cat" in _extract_tokens("cat sat mat")
+
+    def test_excludes_tokens_longer_than_30_chars(self):
+        long = "a" * 31
+        assert _extract_tokens(f"hello {long}") == ["hello"]
+
+    def test_excludes_all_digit_tokens(self):
+        assert _extract_tokens("2024 release") == ["release"]
+
+    def test_excludes_tokens_with_no_letters(self):
+        assert _extract_tokens("1.0 launch") == ["launch"]
+
+    def test_strips_punctuation_from_token_edges(self):
+        result = _extract_tokens("rust! (fast)")
+        assert "rust" in result
+        assert "fast" in result
+
+    def test_returns_empty_for_all_stop_words(self):
+        assert _extract_tokens("the and for") == []
+
+    def test_returns_empty_for_empty_string(self):
+        assert _extract_tokens("") == []
+
+
+# ── _sample ───────────────────────────────────────────────────────────────────
+
+def _make_candidates(n=20):
+    return [{"name": f"c{i}", "score": float(i)} for i in range(1, n + 1)]
+
+
+class TestSample:
+    def test_sample_returns_limit_items(self):
+        candidates = _make_candidates(20)
+        result = _sample(candidates, 5)
+        assert len(result) == 5
+
+    def test_sample_returns_all_when_fewer_than_limit(self):
+        candidates = _make_candidates(3)
+        result = _sample(candidates, 10)
+        assert len(result) == 3
+
+    def test_sample_excludes_zero_score_candidates(self):
+        candidates = [
+            {"name": "good", "score": 10.0},
+            {"name": "zero", "score": 0.0},
+            {"name": "alsogoood", "score": 5.0},
+        ]
+        for _ in range(20):
+            result = _sample(candidates, 10)
+            assert all(r["name"] != "zero" for r in result)
+
+    def test_sample_is_non_deterministic(self):
+        import random
+        candidates = _make_candidates(20)
+        random.seed(1)
+        result_a = [r["name"] for r in _sample(candidates, 5)]
+        random.seed(2)
+        result_b = [r["name"] for r in _sample(candidates, 5)]
+        assert result_a != result_b
+
+    def test_sample_favors_higher_scored_candidates(self):
+        import random
+        candidates = _make_candidates(20)
+        counts = {}
+        random.seed(0)
+        for _ in range(200):
+            for r in _sample(candidates, 5):
+                counts[r["name"]] = counts.get(r["name"], 0) + 1
+        assert counts.get("c20", 0) > counts.get("c1", 0)
