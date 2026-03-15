@@ -3,6 +3,7 @@ import importlib
 import logging
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import whois_client
@@ -63,7 +64,8 @@ def _write_input_csv(path: Path, candidates: list[dict]) -> None:
 def synthesize(scored: list[tuple[float, str]], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     ranked = sorted(scored, key=lambda x: (-x[0], x[1]))[:10]
-    with open(out_dir / "insight.csv", "w", newline="", encoding="utf-8") as f:
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    with open(out_dir / f"insight_{ts}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["domain", "score"])
         writer.writeheader()
         for score, domain in ranked:

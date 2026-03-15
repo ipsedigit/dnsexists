@@ -112,10 +112,24 @@ def test_write_results_creates_csv(tmp_path, monkeypatch):
 
 # --- synthesize ---
 
+def _find_insight(directory):
+    matches = list(directory.glob("insight_*.csv"))
+    assert len(matches) == 1, f"Expected 1 insight file, found: {matches}"
+    return matches[0]
+
+
+def test_synthesize_filename_includes_timestamp(tmp_path):
+    import re
+    synthesize([(1.0, "a.com")], out_dir=tmp_path)
+    matches = list(tmp_path.glob("insight_*.csv"))
+    assert len(matches) == 1
+    assert re.fullmatch(r"insight_\d{8}_\d{6}\.csv", matches[0].name)
+
+
 def test_synthesize_writes_top_10(tmp_path):
     scored = [(float(i), f"domain{i}.com") for i in range(15, 0, -1)]
     synthesize(scored, out_dir=tmp_path)
-    with open(tmp_path / "insight.csv") as f:
+    with open(_find_insight(tmp_path)) as f:
         rows = list(csv_module.DictReader(f))
     assert len(rows) == 10
 
@@ -123,7 +137,7 @@ def test_synthesize_writes_top_10(tmp_path):
 def test_synthesize_writes_all_when_fewer_than_10(tmp_path):
     scored = [(5.0, "a.com"), (3.0, "b.com"), (1.0, "c.com")]
     synthesize(scored, out_dir=tmp_path)
-    with open(tmp_path / "insight.csv") as f:
+    with open(_find_insight(tmp_path)) as f:
         rows = list(csv_module.DictReader(f))
     assert len(rows) == 3
 
@@ -131,7 +145,7 @@ def test_synthesize_writes_all_when_fewer_than_10(tmp_path):
 def test_synthesize_sorts_by_score_descending(tmp_path):
     scored = [(1.0, "low.com"), (100.0, "high.com"), (50.0, "mid.com")]
     synthesize(scored, out_dir=tmp_path)
-    with open(tmp_path / "insight.csv") as f:
+    with open(_find_insight(tmp_path)) as f:
         rows = list(csv_module.DictReader(f))
     assert rows[0]["domain"] == "high.com"
     assert rows[1]["domain"] == "mid.com"
@@ -141,7 +155,7 @@ def test_synthesize_sorts_by_score_descending(tmp_path):
 def test_synthesize_breaks_ties_by_domain_ascending(tmp_path):
     scored = [(10.0, "zzz.com"), (10.0, "aaa.com"), (10.0, "mmm.com")]
     synthesize(scored, out_dir=tmp_path)
-    with open(tmp_path / "insight.csv") as f:
+    with open(_find_insight(tmp_path)) as f:
         rows = list(csv_module.DictReader(f))
     assert rows[0]["domain"] == "aaa.com"
     assert rows[1]["domain"] == "mmm.com"
@@ -151,24 +165,24 @@ def test_synthesize_breaks_ties_by_domain_ascending(tmp_path):
 def test_synthesize_csv_has_only_domain_and_score_columns(tmp_path):
     scored = [(5.0, "example.com")]
     synthesize(scored, out_dir=tmp_path)
-    with open(tmp_path / "insight.csv") as f:
+    with open(_find_insight(tmp_path)) as f:
         reader = csv_module.DictReader(f)
         assert set(reader.fieldnames) == {"domain", "score"}
 
 
 def test_synthesize_empty_input_writes_header_only(tmp_path):
     synthesize([], out_dir=tmp_path)
-    with open(tmp_path / "insight.csv") as f:
+    with open(_find_insight(tmp_path)) as f:
         rows = list(csv_module.DictReader(f))
     assert rows == []
-    assert (tmp_path / "insight.csv").exists()
+    assert len(list(tmp_path.glob("insight_*.csv"))) == 1
 
 
 def test_synthesize_creates_out_dir(tmp_path):
     nested = tmp_path / "insight"
     synthesize([], out_dir=nested)
     assert nested.exists()
-    assert (nested / "insight.csv").exists()
+    assert len(list(nested.glob("insight_*.csv"))) == 1
 
 
 # --- main ---
