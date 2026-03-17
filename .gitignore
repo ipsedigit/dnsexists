@@ -218,3 +218,4 @@ __marimo__/
 input/tosearch_*.txt
 /output/
 !/output/available.csv
+/expiry/output/

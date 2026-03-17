@@ -1,7 +1,8 @@
 import socket
 from unittest.mock import MagicMock, patch
 import pytest
-from whois_client import query, is_registered, TLD_WHOIS_SERVERS
+import datetime
+from whois_client import query, is_registered, TLD_WHOIS_SERVERS, expiry_date
 
 
 def _make_sock(chunks):
@@ -97,3 +98,52 @@ class TestIsRegistered:
             ".shop", ".tech", ".news", ".club", ".xyz",
         }
         assert set(TLD_WHOIS_SERVERS.keys()) == expected
+
+
+class TestExpiryDate:
+    def _patch_query(self, response: str):
+        return patch("whois_client.query", return_value=response)
+
+    def test_parses_expiry_date_format(self):
+        with self._patch_query("Expiry Date: 2026-04-01\n"):
+            result = expiry_date("example.com")
+        assert result == datetime.date(2026, 4, 1)
+
+    def test_parses_expiration_date_iso8601_format(self):
+        with self._patch_query("Expiration Date: 2026-04-01T00:00:00Z\n"):
+            result = expiry_date("example.com")
+        assert result == datetime.date(2026, 4, 1)
+
+    def test_parses_paid_till_format(self):
+        with self._patch_query("paid-till: 2026-04-01\n"):
+            result = expiry_date("example.io")
+        assert result == datetime.date(2026, 4, 1)
+
+    def test_parses_dd_mm_yyyy_expire_date_format(self):
+        with self._patch_query("expire date: 01/04/2026\n"):
+            result = expiry_date("example.it")
+        assert result == datetime.date(2026, 4, 1)
+
+    def test_parses_dd_mm_yyyy_expires_on_format(self):
+        with self._patch_query("Expires On: 01/04/2026\n"):
+            result = expiry_date("example.eu")
+        assert result == datetime.date(2026, 4, 1)
+
+    def test_returns_none_for_unparseable_response(self):
+        with self._patch_query("some unrelated whois text\n"):
+            result = expiry_date("example.com")
+        assert result is None
+
+    def test_returns_none_for_empty_response(self):
+        with self._patch_query(""):
+            result = expiry_date("example.com")
+        assert result is None
+
+    def test_returns_none_for_unsupported_tld(self):
+        result = expiry_date("example.invalidtld")
+        assert result is None
+
+    def test_returns_none_on_network_error(self):
+        with patch("whois_client.query", side_effect=OSError("timeout")):
+            result = expiry_date("example.com")
+        assert result is None

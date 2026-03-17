@@ -58,7 +58,7 @@ jobs:
 
       - name: Commit results
         if: steps.diff.outputs.changed == 'true'
-        run: git commit -m "chore: update available domains"
+        run: 'git commit -m "chore: update available domains"'
 
       - name: Push bot branch
         if: steps.diff.outputs.changed == 'true'

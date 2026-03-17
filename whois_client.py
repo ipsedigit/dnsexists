@@ -1,3 +1,5 @@
+import datetime
+import re
 import socket
 
 TLD_WHOIS_SERVERS: dict[str, str] = {
@@ -44,6 +46,34 @@ def query(server: str, domain: str, timeout: float = 5.0) -> str:
         chunks.append(data)
     sock.close()
     return b"".join(chunks).decode("utf-8", errors="replace")
+
+
+_EXPIRY_PATTERNS = [
+    (re.compile(r"^expiry date:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
+    (re.compile(r"^expiration date:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
+    (re.compile(r"^paid-till:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
+    (re.compile(r"^expire date:\s*(\d{2}/\d{2}/\d{4})", re.IGNORECASE | re.MULTILINE), "%d/%m/%Y"),
+    (re.compile(r"^expires on:\s*(\d{2}/\d{2}/\d{4})", re.IGNORECASE | re.MULTILINE), "%d/%m/%Y"),
+]
+
+
+def expiry_date(domain: str) -> datetime.date | None:
+    tld = "." + domain.rsplit(".", 1)[-1]
+    if tld not in TLD_WHOIS_SERVERS:
+        return None
+    server = TLD_WHOIS_SERVERS[tld]
+    try:
+        response = query(server, domain)
+    except Exception:
+        return None
+    for pattern, fmt in _EXPIRY_PATTERNS:
+        m = pattern.search(response)
+        if m:
+            try:
+                return datetime.datetime.strptime(m.group(1), fmt).date()
+            except ValueError:
+                continue
+    return None
 
 
 def is_registered(domain: str) -> bool:
