@@ -44,9 +44,18 @@ Invoke `superpowers:test-driven-development` with the card description and brain
 
 Do NOT commit. Do NOT push.
 
-### Step 6 — Report completion
+### Step 6 — Update README
+After implementation, update `README.md` to reflect any changes introduced by the card:
+- New CLI flags or commands
+- New output files or paths
+- New environment variables
+- Changed or removed behaviour
+
+Keep updates minimal and accurate — only document what changed. Do not rewrite unrelated sections.
+
+### Step 7 — Report completion
 Inform the user:
-> "Implementation complete. Please review the changes. Move the card to DONE in Jira when you are satisfied."
+> "Implementation complete. README updated. Please review the changes. Move the card to DONE in Jira when you are satisfied."
 
 Stop here. Do NOT transition the card to DONE.
 
