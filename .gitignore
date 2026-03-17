@@ -216,6 +216,6 @@ __marimo__/
 /CLAUDE.md
 /input/output/
 input/tosearch_*.txt
-/output/
+/output/*
 !/output/available.csv
 /expiry/output/
