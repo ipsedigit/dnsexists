@@ -49,6 +49,7 @@ def query(server: str, domain: str, timeout: float = 5.0) -> str:
 
 
 _EXPIRY_PATTERNS = [
+    (re.compile(r"^\s*registry expiry date:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
     (re.compile(r"^expiry date:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
     (re.compile(r"^expiration date:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
     (re.compile(r"^paid-till:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE | re.MULTILINE), "%Y-%m-%d"),
