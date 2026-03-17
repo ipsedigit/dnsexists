@@ -214,3 +214,5 @@ output/
 /dev/*
 /tk/*
 /CLAUDE.md
+/input/output/
+input/tosearch_*.txt
