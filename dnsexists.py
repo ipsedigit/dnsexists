@@ -61,6 +61,23 @@ def _write_input_csv(path: Path, candidates: list[dict]) -> None:
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
 
+def load_skip_names(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return {row["domain"].rsplit(".", 1)[0] for row in reader}
+
+
+def write_available(domains: list[str], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["domain"])
+        writer.writeheader()
+        for domain in sorted(domains):
+            writer.writerow({"domain": domain})
+
+
 def synthesize(scored: list[tuple[float, str]], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     ranked = sorted(scored, key=lambda x: (-x[0], x[1]))[:10]
@@ -144,8 +161,17 @@ def main() -> None:
         logger.warning("No names returned by %s.select()", field)
         sys.exit(0)
 
+    available_csv = root / "output" / "available.csv"
+    skip = load_skip_names(available_csv)
+    names = [n for n in names if n not in skip]
+
+    if not names:
+        write_available([], available_csv)
+        sys.exit(0)
+
     out_dir = root / field / "output"
     names_set = set(names)
+    all_available: list[str] = []
     scored: list[tuple[float, str]] = []
     for candidate in candidates:
         name = candidate["name"]
@@ -156,7 +182,9 @@ def main() -> None:
         write_results(name, available, TLDS, out_dir=out_dir)
         for domain in available:
             scored.append((score, domain))
+            all_available.append(domain)
     synthesize(scored, out_dir=out_dir / "insight")
+    write_available(all_available, available_csv)
     sys.exit(0)
 
 

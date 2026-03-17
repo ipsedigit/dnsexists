@@ -216,3 +216,5 @@ __marimo__/
 /CLAUDE.md
 /input/output/
 input/tosearch_*.txt
+/output/
+!/output/available.csv

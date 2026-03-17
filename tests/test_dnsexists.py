@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import patch, call, MagicMock
 import pytest
-from dnsexists import is_available, check_domains, write_results, synthesize, main
+from dnsexists import is_available, check_domains, write_results, synthesize, main, load_skip_names, write_available
 import csv as csv_module
 
 
@@ -320,3 +320,99 @@ def test_main_field_calls_synthesize_with_scored_domains(monkeypatch, tmp_path):
         [(10.0, "alpha.com"), (5.0, "beta.com")],
         out_dir=tmp_path / "dev" / "output" / "insight",
     )
+
+
+# --- load_skip_names ---
+
+def test_load_skip_names_returns_bare_names(tmp_path):
+    csv_path = tmp_path / "available.csv"
+    csv_path.write_text("domain\nmyapp.dev\nfoo.com\nzoo.io\n")
+    result = load_skip_names(csv_path)
+    assert result == {"myapp", "foo", "zoo"}
+
+
+def test_load_skip_names_missing_file_returns_empty_set(tmp_path):
+    result = load_skip_names(tmp_path / "nonexistent.csv")
+    assert result == set()
+
+
+# --- write_available ---
+
+def test_write_available_writes_sorted_single_column_csv(tmp_path):
+    path = tmp_path / "available.csv"
+    write_available(["zoo.io", "alpha.dev", "mid.com"], path)
+    with open(path, newline="") as f:
+        reader = csv_module.DictReader(f)
+        assert reader.fieldnames == ["domain"]
+        rows = [r["domain"] for r in reader]
+    assert rows == ["alpha.dev", "mid.com", "zoo.io"]
+
+
+def test_write_available_writes_empty_csv_with_header(tmp_path):
+    path = tmp_path / "available.csv"
+    write_available([], path)
+    with open(path, newline="") as f:
+        content = f.read()
+    assert content.strip() == "domain"
+
+
+# --- skip filtering in main ---
+
+def test_main_field_dev_skips_names_in_skip_list(monkeypatch, tmp_path):
+    import dnsexists as dc
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev"])
+    monkeypatch.setattr(dc, "_root", lambda: tmp_path)
+
+    # pre-populate available.csv so "name0" is in skip-list
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True)
+    (out_dir / "available.csv").write_text("domain\nname0.dev\n")
+
+    candidates = [
+        {"name": "name0", "score": 5.0, "sources": ["github"]},
+        {"name": "name1", "score": 3.0, "sources": ["github"]},
+    ]
+    mock_mod = MagicMock()
+    mock_mod.fetch.return_value = candidates
+    mock_mod.select.return_value = ["name0", "name1"]
+
+    with patch("dnsexists.importlib.import_module", return_value=mock_mod), \
+         patch("dnsexists.check_domains", return_value=[]) as mock_check, \
+         patch("dnsexists.write_results"), \
+         patch("dnsexists.synthesize"), \
+         patch("dnsexists.write_available"):
+        with pytest.raises(SystemExit):
+            main()
+
+    checked_names = [c.args[0] for c in mock_check.call_args_list]
+    assert "name0" not in checked_names
+    assert "name1" in checked_names
+
+
+def test_main_field_dev_all_filtered_skips_synthesize(monkeypatch, tmp_path):
+    import dnsexists as dc
+    monkeypatch.setattr("sys.argv", ["dnsexists.py", "--field", "dev"])
+    monkeypatch.setattr(dc, "_root", lambda: tmp_path)
+
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True)
+    (out_dir / "available.csv").write_text("domain\nname0.dev\nname1.com\n")
+
+    candidates = [
+        {"name": "name0", "score": 5.0, "sources": ["github"]},
+        {"name": "name1", "score": 3.0, "sources": ["github"]},
+    ]
+    mock_mod = MagicMock()
+    mock_mod.fetch.return_value = candidates
+    mock_mod.select.return_value = ["name0", "name1"]
+
+    with patch("dnsexists.importlib.import_module", return_value=mock_mod), \
+         patch("dnsexists.check_domains") as mock_check, \
+         patch("dnsexists.synthesize") as mock_synthesize, \
+         patch("dnsexists.write_available") as mock_write_available:
+        with pytest.raises(SystemExit):
+            main()
+
+    mock_check.assert_not_called()
+    mock_synthesize.assert_not_called()
+    mock_write_available.assert_called_once_with([], tmp_path / "output" / "available.csv")
