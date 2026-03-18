@@ -37,15 +37,17 @@ python dnsexists.py --field dev --limit 10
 
 ### Expiry tracker
 
-Check which domains in your watchlist expire within 30 days:
+Monitor valuable `.it` domains approaching expiry (for drop-catching):
 
 ```bash
+python tranco_scorer.py [--output PATH] [--pool 500] [--sample 50]
 python expiry_checker.py
 ```
 
-- Reads `expiry/domains.csv` (columns: `domain`, `expiration_date`, `notes`)
-- Fetches missing expiry dates via WHOIS and writes them back
-- Outputs `expiry/output/YYYY-MM-DD-expiring.csv`
+- `tranco_scorer.py` downloads the Tranco top-1M list, filters `.it` domains, scores them by rank and SLD length, and randomly samples 50 from the top 500 — producing a fresh `expiry/domains.csv` each run
+- `expiry_checker.py` reads `expiry/domains.csv`, fetches missing expiry dates via WHOIS, and outputs `expiry/output/YYYY-MM-DD-expiring.csv`
+- `expiry/domains.csv` is ephemeral (generated each run, not committed)
+- Output files accumulate daily for future synthesis
 
 ## TLDs checked
 

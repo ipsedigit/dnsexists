@@ -38,6 +38,10 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: pip install -r requirements.txt
 
+      - name: Generate daily domain list
+        if: ${{ !inputs.dry_run }}
+        run: python tranco_scorer.py
+
       - name: Run expiry checker
         if: ${{ !inputs.dry_run }}
         run: python expiry_checker.py
@@ -61,9 +65,7 @@ jobs:
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Stage results
-        run: |
-          [ -f expiry/domains.csv ] && git add expiry/domains.csv || true
-          git add -f expiry/output/
+        run: git add -f expiry/output/
 
       - name: Check for changes
         id: diff
