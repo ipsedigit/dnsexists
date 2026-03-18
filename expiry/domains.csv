@@ -1,101 +1,51 @@
 domain,expiration_date,notes
-google.com,2028-09-14,big tech
-apple.com,2027-02-20,big tech
-microsoft.com,2027-05-03,big tech
-amazon.com,2026-10-31,big tech
-meta.com,2034-01-22,big tech
-netflix.com,2027-11-10,streaming
-openai.com,2029-01-19,ai
-anthropic.com,2033-10-02,ai
-x.com,2034-10-20,social media
-twitter.com,2027-01-21,social media
-instagram.com,2034-06-04,social media
-facebook.com,2034-03-30,social media
-linkedin.com,2026-11-02,social media
-reddit.com,2026-04-29,social media
-tiktok.com,2026-07-20,social media
-youtube.com,2027-02-15,video
-discord.com,2026-11-06,video
-github.com,2026-10-09,dev tools
-gitlab.com,2027-01-15,dev tools
-stackoverflow.com,2027-02-02,dev community
-npmjs.com,2031-03-19,package registry
-pypi.org,2032-07-24,package registry
-docker.com,2027-01-26,dev tools
-kubernetes.io,2026-07-23,dev tools
-cloudflare.com,2033-02-17,cloud / cdn
-vercel.com,2029-10-04,cloud
-netlify.com,2026-06-09,cloud
-stripe.com,2027-09-11,fintech
-paypal.com,2026-07-15,fintech
-visa.com,2028-03-09,finance
-mastercard.com,2026-07-26,finance
-coinbase.com,2026-07-02,crypto
-binance.com,2027-04-01,crypto
-shopify.com,2027-03-11,ecommerce
-ebay.com,2034-08-03,ecommerce
-etsy.com,2027-02-05,ecommerce
-alibaba.com,2030-05-23,ecommerce
-wordpress.com,2033-03-03,cms
-wix.com,2029-05-13,cms
-squarespace.com,2027-03-25,cms
-medium.com,2026-05-26,publishing
-substack.com,2030-04-27,publishing
-asana.com,2027-01-21,productivity
-slack.com,2027-10-20,productivity
-webex.com,2027-02-12,productivity
-figma.com,2027-04-10,design
-canva.com,2030-05-05,design
-adobe.com,2026-05-17,design
-salesforce.com,2026-10-21,enterprise saas
-hubspot.com,2027-02-06,enterprise saas
-atlassian.com,2027-03-19,enterprise saas
-dropbox.com,2027-06-27,storage
-box.com,2027-02-17,storage
-mozilla.org,2027-01-23,open source
-apache.org,2029-04-12,open source
-linux.org,2034-05-11,open source
-python.org,2033-03-28,open source
-nodejs.org,2026-09-29,open source
-rust-lang.org,2027-03-30,open source
-golang.org,2026-08-21,open source
-swift.org,2026-12-12,open source
-w3.org,2029-07-05,standards
-ietf.org,2031-03-12,standards
-icann.org,2028-12-07,dns / internet governance
-verisign.com,2034-06-01,dns / internet governance
-namecheap.com,2026-08-11,domain registrar
-godaddy.com,2032-11-01,domain registrar
-whois.com,2028-04-12,domain registrar
-cloudflare.net,2033-02-17,cdn / infra
-fastly.com,2027-07-08,cdn / infra
-akamai.com,2026-08-16,cdn / infra
-tesla.com,2026-11-03,automotive / tech
-spacex.com,2028-05-13,aerospace
-space.com,2027-02-24,science
-cnn.com,2027-09-21,news
-bbc.com,2030-07-14,news
-nytimes.com,2027-01-19,news
-theguardian.com,2026-07-05,news
-reuters.com,2026-06-02,news
-techcrunch.com,2026-06-10,tech news
-wired.com,2027-11-19,tech news
-bloomberg.com,2026-09-28,finance news
-wsj.com,2026-05-25,finance news
-airbnb.com,2026-08-05,travel
-booking.com,2027-04-16,travel
-uber.com,2028-07-13,mobility
-lyft.com,2029-05-22,mobility
-spotify.com,2030-04-23,music
-soundcloud.com,2026-06-08,music
-unity.com,2026-08-06,gaming
-epicgames.com,2027-11-20,gaming
-steampowered.com,2028-08-09,gaming
-twilio.com,2026-10-26,comms api
-sendgrid.com,2028-04-20,comms api
-mailchimp.com,2029-06-29,email marketing
-wikipedia.org,2027-01-13,knowledge
-archive.org,2030-12-13,knowledge
-imdb.com,2027-01-04,entertainment
-yelp.com,2027-12-12,local discovery
-tripadvisor.com,2026-03-23,local discovery
+labs.it,,tranco:162185
+rai.it,,tranco:10437
+sky.it,,tranco:4340
+lays.it,,tranco:444880
+su.it,,tranco:511235
+aldi.it,,tranco:178250
+pkds.it,,tranco:523557
+ieo.it,,tranco:226411
+et3.it,,tranco:536004
+elty.it,,tranco:411651
+chrg.it,,tranco:360656
+cds.it,,tranco:771552
+anp.it,,tranco:447647
+zeev.it,,tranco:239720
+tnx.it,,tranco:62759
+ufp.it,,tranco:658743
+lnet.it,,tranco:378176
+swz.it,,tranco:911391
+abi.it,,tranco:361959
+la7.it,,tranco:16192
+inaf.it,,tranco:35935
+mcz.it,,tranco:115422
+it-d.it,,tranco:102782
+enci.it,,tranco:304314
+itc.it,,tranco:373168
+dns.it,,tranco:3881
+kpmg.it,,tranco:558415
+pgol.it,,tranco:540515
+ance.it,,tranco:357988
+eolo.it,,tranco:28304
+dday.it,,tranco:38809
+rti.it,,tranco:426233
+tin.it,,tranco:63724
+eyeo.it,,tranco:16624
+bpb.it,,tranco:519371
+rid.it,,tranco:583856
+wime.it,,tranco:478655
+ido.it,,tranco:553075
+clac.it,,tranco:176499
+moby.it,,tranco:402435
+iphd.it,,tranco:556627
+dao.it,,tranco:600022
+repl.it,,tranco:54075
+fold.it,,tranco:136990
+yhoo.it,,tranco:132080
+zon.it,,tranco:462733
+fnsi.it,,tranco:493412
+sif.it,,tranco:723774
+sns.it,,tranco:78416
+enav.it,,tranco:571241
