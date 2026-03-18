@@ -1,0 +1,4 @@
+domain,expiration_date,days_remaining,notes
+fakeexpiring.dev,2026-04-01,14,stub entry
+stubdomain.online,2026-04-10,23,stub entry
+expired-stub.dev,2026-03-10,-8,stub entry
