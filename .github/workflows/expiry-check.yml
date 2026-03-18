@@ -63,7 +63,7 @@ jobs:
       - name: Stage results
         run: |
           [ -f expiry/domains.csv ] && git add expiry/domains.csv || true
-          git add expiry/output/
+          git add -f expiry/output/
 
       - name: Check for changes
         id: diff
