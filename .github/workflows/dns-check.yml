@@ -55,8 +55,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Reset bot branch to main
-        run: git checkout -B bot/available-domains
+      - name: Create timestamped branch
+        id: branch
+        run: |
+          BRANCH="bot/available-domains-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Stage results
         run: git add output/available.csv
@@ -76,23 +80,21 @@ jobs:
 
       - name: Push bot branch
         if: steps.diff.outputs.changed == 'true'
-        run: git push origin bot/available-domains --force
+        run: git push origin "${{ steps.branch.outputs.name }}"
 
-      - name: Open PR if none exists
+      - name: Open PR
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if ! gh pr list --head bot/available-domains --base main --state open --json number --jq '.[0].number' | grep -q .; then
-            gh pr create \
-              --title "chore: update available domains" \
-              --body "Automated domain scan results" \
-              --base main \
-              --head bot/available-domains
-          fi
+          gh pr create \
+            --title "chore: update available domains" \
+            --body "Automated domain scan results" \
+            --base main \
+            --head "${{ steps.branch.outputs.name }}"
 
       - name: Merge PR
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge --squash bot/available-domains
+        run: gh pr merge --squash --delete-branch "${{ steps.branch.outputs.name }}"
