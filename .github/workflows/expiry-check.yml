@@ -61,7 +61,9 @@ jobs:
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Stage results
-        run: git add --ignore-missing expiry/domains.csv expiry/output/
+        run: |
+          [ -f expiry/domains.csv ] && git add expiry/domains.csv || true
+          git add expiry/output/
 
       - name: Check for changes
         id: diff
