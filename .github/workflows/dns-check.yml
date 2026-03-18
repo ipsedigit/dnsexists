@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 */3 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip domain scan and inject stub results (for CI testing)"
+        type: boolean
+        default: false
 
 concurrency:
   group: dns-scan
@@ -32,9 +37,16 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run domain scan
+        if: inputs.dry_run != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python dnsexists.py --field dev
+
+      - name: Copy stub results (dry run)
+        if: inputs.dry_run == 'true'
+        run: |
+          mkdir -p output/
+          cp tests/fixtures/available.stub.csv output/available.csv
 
       - name: Configure git identity
         run: |
