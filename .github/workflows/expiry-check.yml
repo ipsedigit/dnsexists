@@ -1,0 +1,98 @@
+name: Expiry Check
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip expiry checker and inject stub results (for CI testing)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: expiry-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Set up Python
+        if: ${{ !inputs.dry_run }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        if: ${{ !inputs.dry_run }}
+        run: pip install -r requirements.txt
+
+      - name: Run expiry checker
+        if: ${{ !inputs.dry_run }}
+        run: python expiry_checker.py
+
+      - name: Copy stub results (dry run)
+        if: ${{ inputs.dry_run }}
+        run: |
+          mkdir -p expiry/output/
+          cp tests/fixtures/expiring.stub.csv expiry/output/$(date +%Y-%m-%d)-expiring.csv
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create timestamped branch
+        id: branch
+        run: |
+          BRANCH="bot/expiry-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Stage results
+        run: git add --ignore-missing expiry/domains.csv expiry/output/
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit results
+        if: steps.diff.outputs.changed == 'true'
+        run: 'git commit -m "chore: update expiry data"'
+
+      - name: Push bot branch
+        if: steps.diff.outputs.changed == 'true'
+        run: git push origin "${{ steps.branch.outputs.name }}"
+
+      - name: Open PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "chore: update expiry data" \
+            --body "Automated expiry check results" \
+            --base main \
+            --head "${{ steps.branch.outputs.name }}"
+
+      - name: Merge PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --squash --delete-branch "${{ steps.branch.outputs.name }}"
