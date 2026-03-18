@@ -65,7 +65,9 @@ jobs:
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Stage results
-        run: git add -f expiry/output/
+        run: |
+          git add expiry/domains.csv
+          git add -f expiry/output/
 
       - name: Check for changes
         id: diff
